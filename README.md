@@ -1,4 +1,5 @@
 # gpu-scheduling-toy
+![CI](https://github.com/ben-lang-eng/gpu-scheduling-toy/actions/workflows/ci.yml/badge.svg)
 
 A small Go service that models a pool of interchangeable GPUs and hands them out
 over an HTTP API. Callers allocate a GPU, use it, and release it; when the pool
