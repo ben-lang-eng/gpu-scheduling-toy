@@ -16,6 +16,10 @@ var ErrNoCapacity = errors.New("pool: no GPU available")
 // positive.
 var ErrInvalidSize = errors.New("pool: size must be positive")
 
+// ErrNotReserved is returned by Release when the pool is already full, meaning
+// the GPU was never reserved or has already been released.
+var ErrNotReserved = errors.New("pool: release without an outstanding reservation")
+
 // GPU identifies a single GPU within a pool. Identifiers are assigned
 // sequentially from zero when the pool is created.
 type GPU int
@@ -68,15 +72,21 @@ func (p *Pool) Acquire(ctx context.Context) (GPU, error) {
 	}
 }
 
-// Release returns a previously acquired GPU to the pool, making it available
-// to other callers. Releasing a GPU that is already free (a double release)
-// or otherwise returning more GPUs than the pool holds is a programming error
-// and causes a panic, since it would corrupt the pool's accounting.
-func (p *Pool) Release(gpu GPU) {
+// Release returns a previously acquired GPU to the pool, making it available to
+// other callers. It returns ErrNotReserved if the pool is already full, which
+// means the GPU was never reserved or has already been released.
+//
+// Because the pool tracks only how many GPUs are free — not which specific ones
+// are outstanding — releasing an in-range identifier that was never acquired
+// can still succeed while the pool is not full. Callers are trusted to release
+// only GPUs they hold; the HTTP layer validates the identifier range, and this
+// limitation is documented in the README.
+func (p *Pool) Release(gpu GPU) error {
 	select {
 	case p.free <- gpu:
+		return nil
 	default:
-		panic("pool: Release called with no reservation outstanding")
+		return ErrNotReserved
 	}
 }
 
@@ -86,6 +96,11 @@ type Stats struct {
 	Capacity  int `json:"capacity"`
 	Available int `json:"available"`
 	InUse     int `json:"inUse"`
+}
+
+// Capacity returns the total number of GPUs in the pool.
+func (p *Pool) Capacity() int {
+	return p.size
 }
 
 // Stats returns a snapshot of how many GPUs are free and in use. Because other

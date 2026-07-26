@@ -60,8 +60,10 @@ func TestTryAcquireReservesUntilEmpty(t *testing.T) {
 		t.Errorf("TryAcquire on empty pool returned %v, want ErrNoCapacity", err)
 	}
 
-	// Releasing one GPU must make exactly one available again.
-	p.Release(first)
+	// Releasing one GPU must succeed and make exactly one available again.
+	if err := p.Release(first); err != nil {
+		t.Fatalf("Release returned unexpected error: %v", err)
+	}
 	if got := p.Stats().Available; got != 1 {
 		t.Errorf("Available = %d after one Release, want 1", got)
 	}
@@ -126,7 +128,9 @@ func TestAcquireUnblocksOnRelease(t *testing.T) {
 	}
 
 	// Releasing the GPU should unblock the waiter promptly.
-	p.Release(held)
+	if err := p.Release(held); err != nil {
+		t.Fatalf("Release returned unexpected error: %v", err)
+	}
 
 	select {
 	case <-acquired:
@@ -173,7 +177,10 @@ func TestConcurrentAcquireReleaseNeverExceedsCapacity(t *testing.T) {
 					t.Errorf("%d GPUs held at once, exceeds capacity %d", held, size)
 				}
 				live.Add(-1)
-				p.Release(gpu)
+				if err := p.Release(gpu); err != nil {
+					t.Errorf("Release returned unexpected error: %v", err)
+					return
+				}
 			}
 		}()
 	}
@@ -182,5 +189,21 @@ func TestConcurrentAcquireReleaseNeverExceedsCapacity(t *testing.T) {
 
 	if got := p.Stats().Available; got != size {
 		t.Errorf("Available = %d after all workers finished, want %d", got, size)
+	}
+}
+
+// TestReleaseOnFullPoolReportsError checks that releasing into a pool that is
+// already full returns ErrNotReserved rather than corrupting its accounting.
+func TestReleaseOnFullPoolReportsError(t *testing.T) {
+	const size = 2
+
+	p, err := pool.New(size)
+	if err != nil {
+		t.Fatalf("New(%d) returned unexpected error: %v", size, err)
+	}
+
+	// The pool starts full, so any release has no matching reservation.
+	if err := p.Release(0); !errors.Is(err, pool.ErrNotReserved) {
+		t.Errorf("Release on full pool returned %v, want ErrNotReserved", err)
 	}
 }
