@@ -1,0 +1,14 @@
+# Compiled binary (produced by `go build` in the project root)
+/gpu-scheduling-toy
+/gpu-scheduling-toy.exe
+
+# Test / coverage output
+*.out
+
+# Go workspace files
+go.work
+go.work.sum
+
+# OS and editor cruft
+.DS_Store
+Thumbs.db
